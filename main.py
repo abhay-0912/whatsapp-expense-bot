@@ -1,10 +1,10 @@
 import re
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
 from postgrest.exceptions import APIError
-from pydantic import BaseModel
 from supabase import Client, create_client
 
 app = FastAPI()
@@ -18,11 +18,6 @@ if not url or not key:
     raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set")
 
 supabase: Client = create_client(url, key)
-
-
-class WebhookPayload(BaseModel):
-    message: str
-    user: str
 
 
 def infer_category(message: str) -> str:
@@ -55,13 +50,20 @@ def home():
 
 
 @app.post("/webhook")
-def webhook(payload: WebhookPayload):
+async def webhook(request: Request):
+    form = await request.form()
+    message = form.get("Body")
+    user = form.get("From")
+
+    if not message or not user:
+        raise HTTPException(status_code=400, detail="Missing Body or From in form data")
+
     try:
-        amount, category = parse_expense(payload.message)
+        amount, category = parse_expense(message)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    user = payload.user.strip().lower()
+    user = user.strip().lower()
 
     try:
         supabase.table("expenses").insert(
@@ -78,6 +80,4 @@ def webhook(payload: WebhookPayload):
     data = response.data or []
     total = sum(int(item.get("amount", 0)) for item in data)
 
-    return {
-        "response": f"Saved ₹{amount} under {category}\nTotal: ₹{total}"
-    }
+    return PlainTextResponse(f"Saved ₹{amount} under {category}. Total: ₹{total}")

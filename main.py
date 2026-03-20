@@ -2,7 +2,7 @@ import re
 import os
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from dotenv import load_dotenv
 from postgrest.exceptions import APIError
 from supabase import Client, create_client
@@ -80,4 +80,10 @@ async def webhook(request: Request):
     data = response.data or []
     total = sum(int(item.get("amount", 0)) for item in data)
 
-    return PlainTextResponse(f"Saved ₹{amount} under {category}. Total: ₹{total}")
+    twiml_response = f"""
+<Response>
+    <Message>Saved ₹{amount} under {category}. Total: ₹{total}</Message>
+</Response>
+"""
+
+    return Response(content=twiml_response, media_type="application/xml")
